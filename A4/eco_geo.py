@@ -2,14 +2,17 @@
 eco_geo.py
 
 A module for ecological and conservation biology analysis using geospatial data. 
-This module provides tools to visualize geographic data, analyze satellite imagery, 
-and calculate biodiversity indices across different geographies.
+This module provides tools to visualize geographic data, analyze habitat maps, 
+and calculate vegetation indices from satellite images.
 """
 
 import folium
 import rasterio
 from rasterio import plot
-import gdal
+from osgeo import gdal
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
 def create_map(location, zoom_start=10):
     """
@@ -27,31 +30,70 @@ def create_map(location, zoom_start=10):
     folium.TileLayer('OpenStreetMap').add_to(map)
     return map
 
-def read_raster_data(file_path):
+def analyze_habitat_raster(raster_path, pixel_size):
     """
-    Read a raster file using Rasterio and return the dataset object for analysis.
-
+    Opens a raster of habitat types, displays it with unique colors, and calculates the area of each habitat type.
+    
     Args:
-        file_path (str): Path to the raster file.
-
+        raster_path (str): The file path to the raster file.
+        pixel_size (float): The size of one pixel in square meters.
+    
     Returns:
-        rasterio.io.DatasetReader: Rasterio dataset reader object.
+        None: Displays a plot and prints area statistics.
     """
     # Open the raster file
-    dataset = rasterio.open(file_path)
-    return dataset
+    with rasterio.open(raster_path) as src:
+        habitat_data = src.read(1)  # Assume habitat data is in the first band
 
-def calculate_ndvi(red_band, nir_band):
+    # Define a unique color for each habitat type (up to 10 types in this example)
+    colors = ['red', 'green', 'blue', 'yellow', 'magenta', 'cyan', 'orange', 'purple', 'brown', 'pink']
+    cmap = ListedColormap(colors[:np.max(habitat_data) + 1])  # Create a color map
+
+    # Display the raster data
+    plt.figure(figsize=(10, 10))
+    plt.imshow(habitat_data, cmap=cmap)
+    plt.colorbar()
+    plt.title('Habitat Types')
+    plt.xlabel('X Coordinate')
+    plt.ylabel('Y Coordinate')
+    plt.show()
+
+    # Calculate the area of each habitat type
+    unique, counts = np.unique(habitat_data, return_counts=True)
+    areas = counts * pixel_size  # Calculate area by multiplying count by pixel size
+
+    # Print the area of each habitat type
+    for habitat_type, area in zip(unique, areas):
+        print(f'Habitat Type {int(habitat_type)}: {area:.2f} square meters')
+
+
+
+def display_ndvi(image_path, red_band_index, nir_band_index):
     """
-    Calculate the Normalized Difference Vegetation Index (NDVI) from red and NIR bands.
+    Calculate and display the NDVI from a satellite image using band indices.
 
     Args:
-        red_band (numpy.ndarray): Array representing the red band of the image.
-        nir_band (numpy.ndarray): Array representing the near-infrared band of the image.
-
-    Returns:
-        numpy.ndarray: NDVI index array.
+        image_path (str): The file path to the satellite image.
+        red_band_index (int): The index of the red band in the satellite image.
+        nir_band_index (int): The index of the NIR band in the satellite image.
     """
-    # Calculate NDVI
-    ndvi = (nir_band - red_band) / (nir_band + red_band)
-    return ndvi
+    # Open the satellite image
+    with rasterio.open(image_path) as src:
+        # Read the specific bands using indices
+        red = src.read(red_band_index)
+        nir = src.read(nir_band_index)
+
+        # Calculate NDVI
+        ndvi = (nir.astype(float) - red.astype(float)) / (nir + red)
+
+        # Set any division by zero to zero
+        ndvi[np.isnan(ndvi)] = 0
+
+        # Plot NDVI
+        plt.figure(figsize=(10, 10))
+        plt.imshow(ndvi, cmap='RdYlGn')
+        plt.colorbar()
+        plt.title('NDVI Image')
+        plt.xlabel('X Coordinate')
+        plt.ylabel('Y Coordinate')
+        plt.show()
